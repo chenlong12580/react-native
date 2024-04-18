@@ -129,6 +129,7 @@ def use_react_native! (
   pod 'React-featureflags', :path => "#{prefix}/ReactCommon/react/featureflags"
   pod 'React-featureflagsnativemodule', :path => "#{prefix}/ReactCommon/react/nativemodule/featureflags"
   pod 'React-microtasksnativemodule', :path => "#{prefix}/ReactCommon/react/nativemodule/microtasks"
+  pod 'React-domnativemodule', :path => "#{prefix}/ReactCommon/react/nativemodule/dom"
   pod 'React-Mapbuffer', :path => "#{prefix}/ReactCommon"
   pod 'React-jserrorhandler', :path => "#{prefix}/ReactCommon/jserrorhandler"
   pod 'React-nativeconfig', :path => "#{prefix}/ReactCommon"
@@ -144,9 +145,11 @@ def use_react_native! (
   pod 'React-jsinspector', :path => "#{prefix}/ReactCommon/jsinspector-modern"
 
   pod 'React-callinvoker', :path => "#{prefix}/ReactCommon/callinvoker"
+  pod 'React-performancetimeline', :path => "#{prefix}/ReactCommon/react/performance/timeline"
   pod 'React-runtimeexecutor', :path => "#{prefix}/ReactCommon/runtimeexecutor"
   pod 'React-runtimescheduler', :path => "#{prefix}/ReactCommon/react/renderer/runtimescheduler"
   pod 'React-rendererdebug', :path => "#{prefix}/ReactCommon/react/renderer/debug"
+  pod 'React-rendererconsistency', :path => "#{prefix}/ReactCommon/react/renderer/consistency"
   pod 'React-perflogger', :path => "#{prefix}/ReactCommon/reactperflogger"
   pod 'React-logger', :path => "#{prefix}/ReactCommon/logger"
   pod 'ReactCommon/turbomodule/core', :path => "#{prefix}/ReactCommon", :modular_headers => true
@@ -294,6 +297,7 @@ def react_native_post_install(
   ReactNativePodsUtils.updateOSDeploymentTarget(installer)
   ReactNativePodsUtils.set_dynamic_frameworks_flags(installer)
   ReactNativePodsUtils.add_ndebug_flag_to_pods_in_release(installer)
+  ReactNativePodsUtils.add_privacy_manifest_if_needed(installer)
 
   NewArchitectureHelper.set_clang_cxx_language_standard_if_needed(installer)
   NewArchitectureHelper.modify_flags_for_new_architecture(installer, NewArchitectureHelper.new_arch_enabled)

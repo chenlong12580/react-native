@@ -108,7 +108,11 @@ public class ReactActivityDelegate {
     } else {
       mReactDelegate =
           new ReactDelegate(
-              getPlainActivity(), getReactNativeHost(), mainComponentName, launchOptions) {
+              getPlainActivity(),
+              getReactNativeHost(),
+              mainComponentName,
+              launchOptions,
+              isFabricEnabled()) {
             @Override
             protected ReactRootView createRootView() {
               ReactRootView rootView = ReactActivityDelegate.this.createRootView();
@@ -127,10 +131,6 @@ public class ReactActivityDelegate {
   protected void loadApp(String appKey) {
     mReactDelegate.loadApp(appKey);
     getPlainActivity().setContentView(mReactDelegate.getReactRootView());
-  }
-
-  public void onUserLeaveHint() {
-    mReactDelegate.onUserLeaveHint();
   }
 
   public void onPause() {

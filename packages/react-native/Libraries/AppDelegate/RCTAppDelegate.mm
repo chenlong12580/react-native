@@ -30,6 +30,7 @@
 #else
 #import <ReactCommon/RCTJscInstance.h>
 #endif
+#import <react/nativemodule/dom/NativeDOM.h>
 #import <react/nativemodule/featureflags/NativeReactNativeFeatureFlags.h>
 #import <react/nativemodule/microtasks/NativeMicrotasks.h>
 
@@ -219,6 +220,10 @@
     return std::make_shared<facebook::react::NativeMicrotasks>(jsInvoker);
   }
 
+  if (name == facebook::react::NativeDOM::kModuleName) {
+    return std::make_shared<facebook::react::NativeDOM>(jsInvoker);
+  }
+
   return nullptr;
 }
 
@@ -243,20 +248,23 @@
 
 - (RCTRootViewFactory *)createRCTRootViewFactory
 {
-  RCTRootViewFactoryConfiguration *configuration =
-      [[RCTRootViewFactoryConfiguration alloc] initWithBundleURL:self.bundleURL
-                                                  newArchEnabled:self.fabricEnabled
-                                              turboModuleEnabled:self.turboModuleEnabled
-                                               bridgelessEnabled:self.bridgelessEnabled];
-
   __weak __typeof(self) weakSelf = self;
-  configuration.createRootViewWithBridge = ^UIView *(RCTBridge *bridge, NSString *moduleName, NSDictionary *initProps)
-  {
+  RCTBundleURLBlock bundleUrlBlock = ^{
+    RCTAppDelegate *strongSelf = weakSelf;
+    return strongSelf.bundleURL;
+  };
+
+  RCTRootViewFactoryConfiguration *configuration =
+      [[RCTRootViewFactoryConfiguration alloc] initWithBundleURLBlock:bundleUrlBlock
+                                                       newArchEnabled:self.fabricEnabled
+                                                   turboModuleEnabled:self.turboModuleEnabled
+                                                    bridgelessEnabled:self.bridgelessEnabled];
+
+  configuration.createRootViewWithBridge = ^UIView *(RCTBridge *bridge, NSString *moduleName, NSDictionary *initProps) {
     return [weakSelf createRootViewWithBridge:bridge moduleName:moduleName initProps:initProps];
   };
 
-  configuration.createBridgeWithDelegate = ^RCTBridge *(id<RCTBridgeDelegate> delegate, NSDictionary *launchOptions)
-  {
+  configuration.createBridgeWithDelegate = ^RCTBridge *(id<RCTBridgeDelegate> delegate, NSDictionary *launchOptions) {
     return [weakSelf createBridgeWithDelegate:delegate launchOptions:launchOptions];
   };
 
@@ -265,19 +273,26 @@
     return [weakSelf sourceURLForBridge:bridge];
   };
 
-  configuration.extraModulesForBridge = ^NSArray<id<RCTBridgeModule>> *_Nonnull(RCTBridge *_Nonnull bridge)
-  {
-    return [weakSelf extraModulesForBridge:bridge];
-  };
+  if ([self respondsToSelector:@selector(extraModulesForBridge:)]) {
+    configuration.extraModulesForBridge = ^NSArray<id<RCTBridgeModule>> *_Nonnull(RCTBridge *_Nonnull bridge)
+    {
+      return [weakSelf extraModulesForBridge:bridge];
+    };
+  }
 
-  configuration.extraLazyModuleClassesForBridge = ^NSDictionary<NSString *, Class> *_Nonnull(RCTBridge *_Nonnull bridge)
-  {
-    return [weakSelf extraLazyModuleClassesForBridge:bridge];
-  };
+  if ([self respondsToSelector:@selector(extraLazyModuleClassesForBridge:)]) {
+    configuration.extraLazyModuleClassesForBridge =
+        ^NSDictionary<NSString *, Class> *_Nonnull(RCTBridge *_Nonnull bridge)
+    {
+      return [weakSelf extraLazyModuleClassesForBridge:bridge];
+    };
+  }
 
-  configuration.bridgeDidNotFindModule = ^BOOL(RCTBridge *_Nonnull bridge, NSString *_Nonnull moduleName) {
-    return [weakSelf bridge:bridge didNotFindModule:moduleName];
-  };
+  if ([self respondsToSelector:@selector(bridge:didNotFindModule:)]) {
+    configuration.bridgeDidNotFindModule = ^BOOL(RCTBridge *_Nonnull bridge, NSString *_Nonnull moduleName) {
+      return [weakSelf bridge:bridge didNotFindModule:moduleName];
+    };
+  }
 
   return [[RCTRootViewFactory alloc] initWithConfiguration:configuration andTurboModuleManagerDelegate:self];
 }

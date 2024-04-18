@@ -15,6 +15,7 @@ import com.facebook.infer.annotation.ThreadConfined;
 import com.facebook.infer.annotation.ThreadSafe;
 import com.facebook.jni.HybridData;
 import com.facebook.proguard.annotations.DoNotStrip;
+import com.facebook.react.DebugCorePackage;
 import com.facebook.react.ReactPackage;
 import com.facebook.react.ViewManagerOnDemandReactPackage;
 import com.facebook.react.bridge.Arguments;
@@ -34,7 +35,6 @@ import com.facebook.react.bridge.queue.QueueThreadExceptionHandler;
 import com.facebook.react.bridge.queue.ReactQueueConfiguration;
 import com.facebook.react.bridge.queue.ReactQueueConfigurationImpl;
 import com.facebook.react.bridge.queue.ReactQueueConfigurationSpec;
-import com.facebook.react.config.ReactFeatureFlags;
 import com.facebook.react.devsupport.interfaces.DevSupportManager;
 import com.facebook.react.fabric.Binding;
 import com.facebook.react.fabric.BindingImpl;
@@ -44,6 +44,7 @@ import com.facebook.react.fabric.ReactNativeConfig;
 import com.facebook.react.fabric.events.EventBeatManager;
 import com.facebook.react.interfaces.exceptionmanager.ReactJsExceptionHandler;
 import com.facebook.react.internal.AndroidChoreographerProvider;
+import com.facebook.react.internal.featureflags.ReactNativeFeatureFlags;
 import com.facebook.react.internal.turbomodule.core.TurboModuleManager;
 import com.facebook.react.internal.turbomodule.core.TurboModuleManagerDelegate;
 import com.facebook.react.module.annotations.ReactModule;
@@ -52,10 +53,10 @@ import com.facebook.react.modules.core.ReactChoreographer;
 import com.facebook.react.turbomodule.core.CallInvokerHolderImpl;
 import com.facebook.react.turbomodule.core.NativeMethodCallInvokerHolderImpl;
 import com.facebook.react.uimanager.ComponentNameResolver;
-import com.facebook.react.uimanager.ComponentNameResolverManager;
+import com.facebook.react.uimanager.ComponentNameResolverBinding;
 import com.facebook.react.uimanager.DisplayMetricsHolder;
 import com.facebook.react.uimanager.IllegalViewOperationException;
-import com.facebook.react.uimanager.UIConstantsProviderManager;
+import com.facebook.react.uimanager.UIConstantsProviderBinding;
 import com.facebook.react.uimanager.UIManagerModule;
 import com.facebook.react.uimanager.UIManagerModuleConstantsHelper;
 import com.facebook.react.uimanager.ViewManager;
@@ -96,9 +97,6 @@ final class ReactInstance {
   private final BridgelessViewManagerResolver mViewManagerResolver;
 
   private JavaScriptContextHolder mJavaScriptContextHolder;
-
-  @DoNotStrip @Nullable private ComponentNameResolverManager mComponentNameResolverManager;
-  @DoNotStrip @Nullable private UIConstantsProviderManager mUIConstantsProviderManager;
 
   static {
     loadLibraryIfNeeded();
@@ -179,6 +177,9 @@ final class ReactInstance {
         new CoreReactPackage(
             bridgelessReactContext.getDevSupportManager(),
             bridgelessReactContext.getDefaultHardwareBackBtnHandler()));
+    if (useDevSupport) {
+      mReactPackages.add(new DebugCorePackage());
+    }
     mReactPackages.addAll(mDelegate.getReactPackages());
 
     TurboModuleManagerDelegate turboModuleManagerDelegate =
@@ -212,67 +213,63 @@ final class ReactInstance {
         new BridgelessViewManagerResolver(mReactPackages, mBridgelessReactContext);
 
     // Initialize function for JS's UIManager.hasViewManagerConfig()
-    mComponentNameResolverManager =
-        new ComponentNameResolverManager(
-            // Use unbuffered RuntimeExecutor to install binding
-            unbufferedRuntimeExecutor,
-            (ComponentNameResolver)
-                () -> {
-                  Collection<String> viewManagerNames = mViewManagerResolver.getViewManagerNames();
-                  if (viewManagerNames.size() < 1) {
-                    FLog.e(TAG, "No ViewManager names found");
-                    return new String[0];
-                  }
-                  return viewManagerNames.toArray(new String[0]);
-                });
+    ComponentNameResolverBinding.install(
+        // Use unbuffered RuntimeExecutor to install binding
+        unbufferedRuntimeExecutor,
+        (ComponentNameResolver)
+            () -> {
+              Collection<String> viewManagerNames = mViewManagerResolver.getViewManagerNames();
+              if (viewManagerNames.size() < 1) {
+                FLog.e(TAG, "No ViewManager names found");
+                return new String[0];
+              }
+              return viewManagerNames.toArray(new String[0]);
+            });
 
     // Initialize function for JS's UIManager.getViewManagerConfig()
     // It should come after getTurboModuleManagerDelegate as it relies on react packages being
     // initialized.
     // This happens inside getTurboModuleManagerDelegate getter.
-    if (ReactFeatureFlags.useNativeViewConfigsInBridgelessMode) {
+    if (ReactNativeFeatureFlags.useNativeViewConfigsInBridgelessMode()) {
       Map<String, Object> customDirectEvents = new HashMap<>();
 
-      mUIConstantsProviderManager =
-          new UIConstantsProviderManager(
-              // Use unbuffered RuntimeExecutor to install binding
-              unbufferedRuntimeExecutor,
-              // Here we are construncting the return value for UIManager.getConstants call.
-              // The old architectre relied on the constatnts struct to contain:
-              // 1. Eagerly loaded view configs for all native components.
-              // 2. genericBubblingEventTypes.
-              // 3. genericDirectEventTypes.
-              // We want to match this beahavior.
-              () -> {
-                return (NativeMap)
-                    Arguments.makeNativeMap(
-                        UIManagerModuleConstantsHelper.getDefaultExportableEventTypes());
-              },
-              (String viewManagerName) -> {
-                ViewManager viewManager = mViewManagerResolver.getViewManager(viewManagerName);
-                if (viewManager == null) {
-                  return null;
-                }
-                return (NativeMap)
-                    UIManagerModule.getConstantsForViewManager(viewManager, customDirectEvents);
-              },
-              () -> {
-                List<ViewManager> viewManagers =
-                    new ArrayList<ViewManager>(
-                        mViewManagerResolver.getEagerViewManagerMap().values());
+      UIConstantsProviderBinding.install(
+          // Use unbuffered RuntimeExecutor to install binding
+          unbufferedRuntimeExecutor,
+          // Here we are construncting the return value for UIManager.getConstants call.
+          // The old architectre relied on the constatnts struct to contain:
+          // 1. Eagerly loaded view configs for all native components.
+          // 2. genericBubblingEventTypes.
+          // 3. genericDirectEventTypes.
+          // We want to match this beahavior.
+          () -> {
+            return (NativeMap)
+                Arguments.makeNativeMap(
+                    UIManagerModuleConstantsHelper.getDefaultExportableEventTypes());
+          },
+          (String viewManagerName) -> {
+            ViewManager viewManager = mViewManagerResolver.getViewManager(viewManagerName);
+            if (viewManager == null) {
+              return null;
+            }
+            return (NativeMap)
+                UIManagerModule.getConstantsForViewManager(viewManager, customDirectEvents);
+          },
+          () -> {
+            List<ViewManager> viewManagers =
+                new ArrayList<>(mViewManagerResolver.getEagerViewManagerMap().values());
 
-                Map<String, Object> constants =
-                    UIManagerModule.createConstants(viewManagers, null, customDirectEvents);
+            Map<String, Object> constants =
+                UIManagerModule.createConstants(viewManagers, null, customDirectEvents);
 
-                Collection<String> lazyViewManagers =
-                    mViewManagerResolver.getLazyViewManagerNames();
-                if (lazyViewManagers.size() > 0) {
-                  constants.put("ViewManagerNames", new ArrayList<>(lazyViewManagers));
-                  constants.put("LazyViewManagersEnabled", true);
-                }
+            Collection<String> lazyViewManagers = mViewManagerResolver.getLazyViewManagerNames();
+            if (lazyViewManagers.size() > 0) {
+              constants.put("ViewManagerNames", new ArrayList<>(lazyViewManagers));
+              constants.put("LazyViewManagersEnabled", true);
+            }
 
-                return Arguments.makeNativeMap(constants);
-              });
+            return Arguments.makeNativeMap(constants);
+          });
     }
 
     EventBeatManager eventBeatManager = new EventBeatManager();
@@ -432,8 +429,6 @@ final class ReactInstance {
     mFabricUIManager.invalidate();
     mJavaTimerManager.onInstanceDestroy();
     mHybridData.resetNative();
-    mComponentNameResolverManager = null;
-    mUIConstantsProviderManager = null;
     mJavaScriptContextHolder.clear();
   }
 
@@ -490,7 +485,8 @@ final class ReactInstance {
       ReactSoftExceptionLogger.logSoftException(
           TAG,
           new ReactNoCrashSoftException(
-              "Native method handleMemoryPressureJs is called earlier than librninstance.so got ready."));
+              "Native method handleMemoryPressureJs is called earlier than librninstance.so got"
+                  + " ready."));
     }
   }
 
@@ -501,7 +497,9 @@ final class ReactInstance {
     return mFabricUIManager.getEventDispatcher();
   }
 
-  /** @return The {@link FabricUIManager} if it's been initialized. */
+  /**
+   * @return The {@link FabricUIManager} if it's been initialized.
+   */
   /* package */ FabricUIManager getUIManager() {
     return mFabricUIManager;
   }

@@ -18,6 +18,7 @@ import type {NextHandleFunction} from 'connect';
 import type {IncomingMessage, ServerResponse} from 'http';
 
 import getDevToolsFrontendUrl from '../utils/getDevToolsFrontendUrl';
+import crypto from 'crypto';
 import url from 'url';
 
 const debuggerInstances = new Map<string, ?LaunchedBrowser>();
@@ -107,6 +108,10 @@ export default function openDebuggerMiddleware({
         return;
       }
 
+      const launchId = crypto.randomUUID();
+      const useFuseboxEntryPoint =
+        target.reactNative.capabilities?.prefersFuseboxFrontend;
+
       try {
         switch (launchType) {
           case 'launch':
@@ -122,6 +127,7 @@ export default function openDebuggerMiddleware({
                   experiments,
                   target.webSocketDebuggerUrl,
                   serverBaseUrl,
+                  {launchId, useFuseboxEntryPoint},
                 ),
               ),
             );
@@ -133,7 +139,7 @@ export default function openDebuggerMiddleware({
                 experiments,
                 target.webSocketDebuggerUrl,
                 serverBaseUrl,
-                {relative: true},
+                {relative: true, launchId, useFuseboxEntryPoint},
               ),
             });
             res.end();

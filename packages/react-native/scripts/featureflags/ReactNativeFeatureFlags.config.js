@@ -42,15 +42,14 @@ const definitions: FeatureFlagDefinitions = {
       description:
         'Enables the use of a background executor to compute layout and commit updates on Fabric (this system is deprecated and should not be used).',
     },
+    enableCleanTextInputYogaNode: {
+      defaultValue: false,
+      description: 'Clean yoga node when <TextInput /> does not change.',
+    },
     enableCustomDrawOrderFabric: {
       defaultValue: false,
       description:
         'When enabled, Fabric will use customDrawOrder in ReactViewGroup (similar to old architecture).',
-    },
-    enableFixForClippedSubviewsCrash: {
-      defaultValue: false,
-      description:
-        'Attempt at fixing a crash related to subview clipping on Android. This is a kill switch for the fix',
     },
     enableMicrotasks: {
       defaultValue: false,
@@ -67,6 +66,21 @@ const definitions: FeatureFlagDefinitions = {
       description:
         'Uses new, deduplicated logic for constructing Android Spannables from text fragments',
     },
+    enableSynchronousStateUpdates: {
+      defaultValue: false,
+      description:
+        'Dispatches state updates synchronously in Fabric (e.g.: updates the scroll position in the shadow tree synchronously from the main thread).',
+    },
+    enableUIConsistency: {
+      defaultValue: false,
+      description:
+        'Ensures that JavaScript always has a consistent view of the state of the UI (e.g.: commits done in other threads are not immediately propagated to JS during its execution).',
+    },
+    forceBatchingMountItemsOnAndroid: {
+      defaultValue: false,
+      description:
+        'Forces the mounting layer on Android to always batch mount items instead of dispatching them immediately. This might fix some crashes related to synchronous state updates, where some views dispatch state updates during mount.',
+    },
     inspectorEnableCxxInspectorPackagerConnection: {
       defaultValue: false,
       description:
@@ -77,10 +91,25 @@ const definitions: FeatureFlagDefinitions = {
       description:
         'Flag determining if the modern CDP backend should be enabled. This flag is global and should not be changed across React Host lifetimes.',
     },
+    preventDoubleTextMeasure: {
+      defaultValue: false,
+      description:
+        'When enabled, ParagraphShadowNode will no longer call measure twice.',
+    },
     useModernRuntimeScheduler: {
       defaultValue: false,
       description:
         'When enabled, it uses the modern fork of RuntimeScheduler that allows scheduling tasks with priorities from any thread.',
+    },
+    useNativeViewConfigsInBridgelessMode: {
+      defaultValue: false,
+      description:
+        'When enabled, the native view configs are used in bridgeless mode.',
+    },
+    useStateAlignmentMechanism: {
+      defaultValue: false,
+      description:
+        'When enabled, it uses optimised state reconciliation algorithm.',
     },
   },
 

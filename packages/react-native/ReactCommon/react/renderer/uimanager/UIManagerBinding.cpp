@@ -13,6 +13,7 @@
 #include <react/renderer/components/view/PointerEvent.h>
 #include <react/renderer/core/LayoutableShadowNode.h>
 #include <react/renderer/debug/SystraceSection.h>
+#include <react/renderer/dom/DOM.h>
 #include <react/renderer/runtimescheduler/RuntimeSchedulerBinding.h>
 #include <react/renderer/uimanager/primitives.h>
 
@@ -140,22 +141,23 @@ void UIManagerBinding::dispatchEventToJS(
     return;
   }
 
-  auto instanceHandle = eventTarget != nullptr
-    ? [&]() {
-      auto instanceHandle = eventTarget->getInstanceHandle(runtime);
-      if (instanceHandle.isUndefined()) {
-        return jsi::Value::null();
-      }
+  auto instanceHandle = eventTarget != nullptr ? [&]() {
+    auto instanceHandle = eventTarget->getInstanceHandle(runtime);
+    if (instanceHandle.isUndefined()) {
+      return jsi::Value::null();
+    }
 
-      // Mixing `target` into `payload`.
-      if (!payload.isObject()) {
-        LOG(ERROR) << "payload for dispatchEvent is not an object: " << eventTarget->getTag();
-      }
-      react_native_assert(payload.isObject());
-      payload.asObject(runtime).setProperty(runtime, "target", eventTarget->getTag());
-      return instanceHandle;
-    }()
-    : jsi::Value::null();
+    // Mixing `target` into `payload`.
+    if (!payload.isObject()) {
+      LOG(ERROR) << "payload for dispatchEvent is not an object: "
+                 << eventTarget->getTag();
+    }
+    react_native_assert(payload.isObject());
+    payload.asObject(runtime).setProperty(
+        runtime, "target", eventTarget->getTag());
+    return instanceHandle;
+  }()
+                                               : jsi::Value::null();
 
   if (instanceHandle.isNull()) {
     // Do not log all missing instanceHandles to avoid log spam
@@ -195,7 +197,6 @@ jsi::Value UIManagerBinding::get(
     jsi::Runtime& runtime,
     const jsi::PropNameID& name) {
   auto methodName = name.utf8(runtime);
-  SystraceSection s("UIManagerBinding::get", "name", methodName);
 
   // Convert shared_ptr<UIManager> to a raw ptr
   // Why? Because:
@@ -583,7 +584,7 @@ jsi::Value UIManagerBinding::get(
           auto layoutMetrics = uiManager->getRelativeLayoutMetrics(
               *shadowNodeFromValue(runtime, arguments[0]),
               shadowNodeFromValue(runtime, arguments[1]).get(),
-              {/* .includeTransform = */ true});
+              {/* .includeTransform = */ false});
           auto frame = layoutMetrics.frame;
           auto result = jsi::Object(runtime);
           result.setProperty(runtime, "left", frame.origin.x);
@@ -653,28 +654,38 @@ jsi::Value UIManagerBinding::get(
             size_t count) {
           validateArgumentCount(runtime, methodName, paramCount, count);
 
-          auto layoutMetrics = uiManager->getRelativeLayoutMetrics(
-              *shadowNodeFromValue(runtime, arguments[0]),
-              shadowNodeFromValue(runtime, arguments[1]).get(),
-              {/* .includeTransform = */ false});
+          auto shadowNode = shadowNodeFromValue(runtime, arguments[0]);
+          auto relativeToShadowNode =
+              shadowNodeFromValue(runtime, arguments[1]);
+          auto onFailFunction =
+              arguments[2].getObject(runtime).getFunction(runtime);
+          auto onSuccessFunction =
+              arguments[3].getObject(runtime).getFunction(runtime);
 
-          if (layoutMetrics == EmptyLayoutMetrics) {
-            auto onFailFunction =
-                arguments[2].getObject(runtime).getFunction(runtime);
+          auto currentRevision =
+              uiManager->getShadowTreeRevisionProvider()->getCurrentRevision(
+                  shadowNode->getSurfaceId());
+          if (currentRevision == nullptr) {
             onFailFunction.call(runtime);
             return jsi::Value::undefined();
           }
 
-          auto onSuccessFunction =
-              arguments[3].getObject(runtime).getFunction(runtime);
-          auto frame = layoutMetrics.frame;
+          auto maybeRect = dom::measureLayout(
+              currentRevision, *shadowNode, *relativeToShadowNode);
+
+          if (!maybeRect) {
+            onFailFunction.call(runtime);
+            return jsi::Value::undefined();
+          }
+
+          auto rect = maybeRect.value();
 
           onSuccessFunction.call(
               runtime,
-              {jsi::Value{runtime, (double)frame.origin.x},
-               jsi::Value{runtime, (double)frame.origin.y},
-               jsi::Value{runtime, (double)frame.size.width},
-               jsi::Value{runtime, (double)frame.size.height}});
+              {jsi::Value{runtime, rect.x},
+               jsi::Value{runtime, rect.y},
+               jsi::Value{runtime, rect.width},
+               jsi::Value{runtime, rect.height}});
           return jsi::Value::undefined();
         });
   }
@@ -693,33 +704,27 @@ jsi::Value UIManagerBinding::get(
           validateArgumentCount(runtime, methodName, paramCount, count);
 
           auto shadowNode = shadowNodeFromValue(runtime, arguments[0]);
-          auto layoutMetrics = uiManager->getRelativeLayoutMetrics(
-              *shadowNode, nullptr, {/* .includeTransform = */ true});
-          auto onSuccessFunction =
+          auto callbackFunction =
               arguments[1].getObject(runtime).getFunction(runtime);
 
-          if (layoutMetrics == EmptyLayoutMetrics) {
-            onSuccessFunction.call(runtime, {0, 0, 0, 0, 0, 0});
+          auto currentRevision =
+              uiManager->getShadowTreeRevisionProvider()->getCurrentRevision(
+                  shadowNode->getSurfaceId());
+          if (currentRevision == nullptr) {
+            callbackFunction.call(runtime, {0, 0, 0, 0, 0, 0});
             return jsi::Value::undefined();
           }
-          auto newestCloneOfShadowNode =
-              uiManager->getNewestCloneOfShadowNode(*shadowNode);
 
-          auto layoutableShadowNode = dynamic_cast<const LayoutableShadowNode*>(
-              newestCloneOfShadowNode.get());
-          Point originRelativeToParent = layoutableShadowNode != nullptr
-              ? layoutableShadowNode->getLayoutMetrics().frame.origin
-              : Point();
+          auto measureRect = dom::measure(currentRevision, *shadowNode);
 
-          auto frame = layoutMetrics.frame;
-          onSuccessFunction.call(
+          callbackFunction.call(
               runtime,
-              {jsi::Value{runtime, (double)originRelativeToParent.x},
-               jsi::Value{runtime, (double)originRelativeToParent.y},
-               jsi::Value{runtime, (double)frame.size.width},
-               jsi::Value{runtime, (double)frame.size.height},
-               jsi::Value{runtime, (double)frame.origin.x},
-               jsi::Value{runtime, (double)frame.origin.y}});
+              {jsi::Value{runtime, measureRect.x},
+               jsi::Value{runtime, measureRect.y},
+               jsi::Value{runtime, measureRect.width},
+               jsi::Value{runtime, measureRect.height},
+               jsi::Value{runtime, measureRect.pageX},
+               jsi::Value{runtime, measureRect.pageY}});
           return jsi::Value::undefined();
         });
   }
@@ -737,27 +742,26 @@ jsi::Value UIManagerBinding::get(
             size_t count) {
           validateArgumentCount(runtime, methodName, paramCount, count);
 
-          auto layoutMetrics = uiManager->getRelativeLayoutMetrics(
-              *shadowNodeFromValue(runtime, arguments[0]),
-              nullptr,
-              {/* .includeTransform = */ true,
-               /* .includeViewportOffset = */ true});
-
-          auto onSuccessFunction =
+          auto shadowNode = shadowNodeFromValue(runtime, arguments[0]);
+          auto callbackFunction =
               arguments[1].getObject(runtime).getFunction(runtime);
 
-          if (layoutMetrics == EmptyLayoutMetrics) {
-            onSuccessFunction.call(runtime, {0, 0, 0, 0});
+          auto currentRevision =
+              uiManager->getShadowTreeRevisionProvider()->getCurrentRevision(
+                  shadowNode->getSurfaceId());
+
+          if (currentRevision == nullptr) {
+            callbackFunction.call(runtime, {0, 0, 0, 0});
             return jsi::Value::undefined();
           }
 
-          auto frame = layoutMetrics.frame;
-          onSuccessFunction.call(
+          auto rect = dom::measureInWindow(currentRevision, *shadowNode);
+          callbackFunction.call(
               runtime,
-              {jsi::Value{runtime, (double)frame.origin.x},
-               jsi::Value{runtime, (double)frame.origin.y},
-               jsi::Value{runtime, (double)frame.size.width},
-               jsi::Value{runtime, (double)frame.size.height}});
+              {jsi::Value{runtime, rect.x},
+               jsi::Value{runtime, rect.y},
+               jsi::Value{runtime, rect.width},
+               jsi::Value{runtime, rect.height}});
           return jsi::Value::undefined();
         });
   }
@@ -868,25 +872,26 @@ jsi::Value UIManagerBinding::get(
             size_t count) -> jsi::Value {
           validateArgumentCount(runtime, methodName, paramCount, count);
 
+          auto shadowNode = shadowNodeFromValue(runtime, arguments[0]);
           bool includeTransform = arguments[1].getBool();
 
-          auto layoutMetrics = uiManager->getRelativeLayoutMetrics(
-              *shadowNodeFromValue(runtime, arguments[0]),
-              nullptr,
-              {/* .includeTransform = */ includeTransform,
-               /* .includeViewportOffset = */ true});
+          auto currentRevision =
+              uiManager->getShadowTreeRevisionProvider()->getCurrentRevision(
+                  shadowNode->getSurfaceId());
 
-          if (layoutMetrics == EmptyLayoutMetrics) {
+          if (currentRevision == nullptr) {
             return jsi::Value::undefined();
           }
 
-          auto frame = layoutMetrics.frame;
+          auto domRect = dom::getBoundingClientRect(
+              currentRevision, *shadowNode, includeTransform);
+
           return jsi::Array::createWithElements(
               runtime,
-              jsi::Value{runtime, (double)frame.origin.x},
-              jsi::Value{runtime, (double)frame.origin.y},
-              jsi::Value{runtime, (double)frame.size.width},
-              jsi::Value{runtime, (double)frame.size.height});
+              jsi::Value{runtime, domRect.x},
+              jsi::Value{runtime, domRect.y},
+              jsi::Value{runtime, domRect.width},
+              jsi::Value{runtime, domRect.height});
         });
   }
 
@@ -909,10 +914,18 @@ jsi::Value UIManagerBinding::get(
           auto shadowNode = shadowNodeFromValue(runtime, arguments[0]);
           auto otherShadowNode = shadowNodeFromValue(runtime, arguments[1]);
 
-          auto documentPosition =
-              uiManager->compareDocumentPosition(*shadowNode, *otherShadowNode);
+          auto currentRevision =
+              uiManager->getShadowTreeRevisionProvider()->getCurrentRevision(
+                  shadowNode->getSurfaceId());
 
-          return jsi::Value(documentPosition);
+          double documentPosition = 0;
+
+          if (currentRevision != nullptr) {
+            documentPosition = (double)dom::compareDocumentPosition(
+                currentRevision, *shadowNode, *otherShadowNode);
+          }
+
+          return {documentPosition};
         });
   }
 

@@ -9,13 +9,17 @@
 
 #include <react/renderer/core/EventBeat.h>
 #include <react/renderer/core/EventListener.h>
+#include <react/renderer/core/EventLogger.h>
 #include <react/renderer/core/EventQueue.h>
 #include <react/renderer/core/EventQueueProcessor.h>
+#include <react/renderer/core/StatePipe.h>
 #include <react/renderer/core/StateUpdate.h>
+#include <memory>
 
 namespace facebook::react {
 
 struct RawEvent;
+class RuntimeScheduler;
 
 /*
  * Represents event-delivery infrastructure.
@@ -29,12 +33,20 @@ class EventDispatcher {
   EventDispatcher(
       const EventQueueProcessor& eventProcessor,
       const EventBeat::Factory& asynchronousEventBeatFactory,
-      const EventBeat::SharedOwnerBox& ownerBox);
+      const EventBeat::SharedOwnerBox& ownerBox,
+      RuntimeScheduler& runtimeScheduler,
+      StatePipe statePipe,
+      std::weak_ptr<EventLogger> eventLogger);
 
   /*
    * Dispatches a raw event with given priority using event-delivery pipe.
    */
   void dispatchEvent(RawEvent&& rawEvent) const;
+
+  /*
+   * Experimental API exposed to support EventEmitter::experimental_flushSync.
+   */
+  void experimental_flushSync() const;
 
   /*
    * Dispatches a raw event with asynchronous batched priority. Before the
@@ -62,8 +74,10 @@ class EventDispatcher {
 
  private:
   EventQueue eventQueue_;
+  const StatePipe statePipe_;
 
   mutable EventListenerContainer eventListeners_;
+  const std::weak_ptr<EventLogger> eventLogger_;
 };
 
 } // namespace facebook::react

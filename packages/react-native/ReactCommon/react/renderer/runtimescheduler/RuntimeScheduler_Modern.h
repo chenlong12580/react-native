@@ -8,6 +8,7 @@
 #pragma once
 
 #include <ReactCommon/RuntimeExecutor.h>
+#include <react/renderer/consistency/ShadowTreeRevisionConsistencyManager.h>
 #include <react/renderer/runtimescheduler/RuntimeScheduler.h>
 #include <react/renderer/runtimescheduler/RuntimeSchedulerClock.h>
 #include <react/renderer/runtimescheduler/Task.h>
@@ -22,8 +23,7 @@ class RuntimeScheduler_Modern final : public RuntimeSchedulerBase {
  public:
   explicit RuntimeScheduler_Modern(
       RuntimeExecutor runtimeExecutor,
-      std::function<RuntimeSchedulerTimePoint()> now =
-          RuntimeSchedulerClock::now);
+      std::function<RuntimeSchedulerTimePoint()> now);
 
   /*
    * Not copyable.
@@ -122,6 +122,10 @@ class RuntimeScheduler_Modern final : public RuntimeSchedulerBase {
   void scheduleRenderingUpdate(
       RuntimeSchedulerRenderingUpdate&& renderingUpdate) override;
 
+  void setShadowTreeRevisionConsistencyManager(
+      ShadowTreeRevisionConsistencyManager*
+          shadowTreeRevisionConsistencyManager) override;
+
  private:
   std::atomic<uint_fast8_t> syncTaskRequests_{0};
 
@@ -131,7 +135,7 @@ class RuntimeScheduler_Modern final : public RuntimeSchedulerBase {
       TaskPriorityComparer>
       taskQueue_;
 
-  std::shared_ptr<Task> currentTask_;
+  Task* currentTask_{};
 
   /**
    * This protects the access to `taskQueue_` and `isWorkLoopScheduled_`.
@@ -158,12 +162,12 @@ class RuntimeScheduler_Modern final : public RuntimeSchedulerBase {
    */
   void executeTask(
       jsi::Runtime& runtime,
-      const std::shared_ptr<Task>& task,
+      Task& task,
       RuntimeSchedulerTimePoint currentTime);
 
   void executeMacrotask(
       jsi::Runtime& runtime,
-      std::shared_ptr<Task> task,
+      Task& task,
       bool didUserCallbackTimeout) const;
 
   void updateRendering();
@@ -184,6 +188,8 @@ class RuntimeScheduler_Modern final : public RuntimeSchedulerBase {
   bool isWorkLoopScheduled_{false};
 
   std::queue<RuntimeSchedulerRenderingUpdate> pendingRenderingUpdates_;
+  ShadowTreeRevisionConsistencyManager* shadowTreeRevisionConsistencyManager_{
+      nullptr};
 };
 
 } // namespace facebook::react

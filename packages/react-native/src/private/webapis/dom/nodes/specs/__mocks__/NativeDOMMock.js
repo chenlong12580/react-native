@@ -13,6 +13,11 @@ import type {
   InternalInstanceHandle,
   Node,
 } from '../../../../../../../Libraries/Renderer/shims/ReactNativeTypes';
+import type {
+  MeasureInWindowOnSuccessCallback,
+  MeasureLayoutOnSuccessCallback,
+  MeasureOnSuccessCallback,
+} from '../NativeDOM';
 import typeof NativeDOM from '../NativeDOM';
 
 import {
@@ -46,7 +51,7 @@ const NativeDOMMock: NativeDOM = {
     (
       node: Node,
       includeTransform: boolean,
-    ): ?[
+    ): [
       /* x:*/ number,
       /* y:*/ number,
       /* width:*/ number,
@@ -58,7 +63,7 @@ const NativeDOMMock: NativeDOM = {
       const currentProps =
         nodeInCurrentTree != null ? fromNode(nodeInCurrentTree).props : null;
       if (currentProps == null) {
-        return null;
+        return [0, 0, 0, 0];
       }
 
       const boundingClientRectForTests: ?{
@@ -71,7 +76,7 @@ const NativeDOMMock: NativeDOM = {
         currentProps.__boundingClientRectForTests;
 
       if (boundingClientRectForTests == null) {
-        return null;
+        return [0, 0, 0, 0];
       }
 
       const {x, y, width, height} = boundingClientRectForTests;
@@ -193,14 +198,14 @@ const NativeDOMMock: NativeDOM = {
   getOffset: jest.fn(
     (
       node: Node,
-    ): ?[
-      /* offsetParent: */ InternalInstanceHandle,
+    ): [
+      /* offsetParent: */ ?InternalInstanceHandle,
       /* offsetTop: */ number,
       /* offsetLeft: */ number,
     ] => {
       const ancestors = getAncestorsInCurrentTree(node);
       if (ancestors == null) {
-        return null;
+        return [null, 0, 0];
       }
 
       const [parent, position] = ancestors[ancestors.length - 1];
@@ -209,7 +214,7 @@ const NativeDOMMock: NativeDOM = {
       const currentProps =
         nodeInCurrentTree != null ? fromNode(nodeInCurrentTree).props : null;
       if (currentProps == null || hasDisplayNone(nodeInCurrentTree)) {
-        return null;
+        return [null, 0, 0];
       }
 
       const offsetForTests: ?{
@@ -220,7 +225,7 @@ const NativeDOMMock: NativeDOM = {
         currentProps.__offsetForTests;
 
       if (offsetForTests == null) {
-        return null;
+        return [null, 0, 0];
       }
 
       let currentIndex = ancestors.length - 1;
@@ -230,7 +235,7 @@ const NativeDOMMock: NativeDOM = {
 
       if (currentIndex >= 0) {
         // The node or one of its ancestors have display: none
-        return null;
+        return [null, 0, 0];
       }
 
       return [
@@ -242,14 +247,14 @@ const NativeDOMMock: NativeDOM = {
   ),
 
   getScrollPosition: jest.fn(
-    (node: Node): ?[/* scrollLeft: */ number, /* scrollTop: */ number] => {
+    (node: Node): [/* scrollLeft: */ number, /* scrollTop: */ number] => {
       ensureHostNode(node);
 
       const nodeInCurrentTree = getNodeInCurrentTree(node);
       const currentProps =
         nodeInCurrentTree != null ? fromNode(nodeInCurrentTree).props : null;
       if (currentProps == null) {
-        return null;
+        return [0, 0];
       }
 
       const scrollForTests: ?{
@@ -261,7 +266,7 @@ const NativeDOMMock: NativeDOM = {
         currentProps.__scrollForTests;
 
       if (scrollForTests == null) {
-        return null;
+        return [0, 0];
       }
 
       const {scrollLeft, scrollTop} = scrollForTests;
@@ -270,14 +275,14 @@ const NativeDOMMock: NativeDOM = {
   ),
 
   getScrollSize: jest.fn(
-    (node: Node): ?[/* scrollLeft: */ number, /* scrollTop: */ number] => {
+    (node: Node): [/* scrollLeft: */ number, /* scrollTop: */ number] => {
       ensureHostNode(node);
 
       const nodeInCurrentTree = getNodeInCurrentTree(node);
       const currentProps =
         nodeInCurrentTree != null ? fromNode(nodeInCurrentTree).props : null;
       if (currentProps == null) {
-        return null;
+        return [0, 0];
       }
 
       const scrollForTests: ?{
@@ -289,7 +294,7 @@ const NativeDOMMock: NativeDOM = {
         currentProps.__scrollForTests;
 
       if (scrollForTests == null) {
-        return null;
+        return [0, 0];
       }
 
       const {scrollWidth, scrollHeight} = scrollForTests;
@@ -298,14 +303,14 @@ const NativeDOMMock: NativeDOM = {
   ),
 
   getInnerSize: jest.fn(
-    (node: Node): ?[/* width: */ number, /* height: */ number] => {
+    (node: Node): [/* width: */ number, /* height: */ number] => {
       ensureHostNode(node);
 
       const nodeInCurrentTree = getNodeInCurrentTree(node);
       const currentProps =
         nodeInCurrentTree != null ? fromNode(nodeInCurrentTree).props : null;
       if (currentProps == null) {
-        return null;
+        return [0, 0];
       }
 
       const innerSizeForTests: ?{
@@ -317,7 +322,7 @@ const NativeDOMMock: NativeDOM = {
         currentProps.__innerSizeForTests;
 
       if (innerSizeForTests == null) {
-        return null;
+        return [0, 0];
       }
 
       const {width, height} = innerSizeForTests;
@@ -325,10 +330,10 @@ const NativeDOMMock: NativeDOM = {
     },
   ),
 
-  getBorderSize: jest.fn(
+  getBorderWidth: jest.fn(
     (
       node: Node,
-    ): ?[
+    ): [
       /* topWidth: */ number,
       /* rightWidth: */ number,
       /* bottomWidth: */ number,
@@ -340,7 +345,7 @@ const NativeDOMMock: NativeDOM = {
       const currentProps =
         nodeInCurrentTree != null ? fromNode(nodeInCurrentTree).props : null;
       if (currentProps == null) {
-        return null;
+        return [0, 0, 0, 0];
       }
 
       const borderSizeForTests: ?{
@@ -354,7 +359,7 @@ const NativeDOMMock: NativeDOM = {
         currentProps.__borderSizeForTests;
 
       if (borderSizeForTests == null) {
-        return null;
+        return [0, 0, 0, 0];
       }
 
       const {
@@ -371,6 +376,38 @@ const NativeDOMMock: NativeDOM = {
     ensureHostNode(node);
     return 'RN:' + fromNode(node).viewName;
   }),
+
+  /**
+   * Legacy layout APIs
+   */
+
+  measure: jest.fn((node: Node, callback: MeasureOnSuccessCallback): void => {
+    ensureHostNode(node);
+
+    callback(10, 10, 100, 100, 0, 0);
+  }),
+
+  measureInWindow: jest.fn(
+    (node: Node, callback: MeasureInWindowOnSuccessCallback): void => {
+      ensureHostNode(node);
+
+      callback(10, 10, 100, 100);
+    },
+  ),
+
+  measureLayout: jest.fn(
+    (
+      node: Node,
+      relativeNode: Node,
+      onFail: () => void,
+      onSuccess: MeasureLayoutOnSuccessCallback,
+    ): void => {
+      ensureHostNode(node);
+      ensureHostNode(relativeNode);
+
+      onSuccess(1, 1, 100, 100);
+    },
+  ),
 };
 
 export default NativeDOMMock;

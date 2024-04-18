@@ -32,6 +32,7 @@ import com.facebook.react.uiapp.component.MyNativeViewManager
 import com.facebook.react.uimanager.ReactShadowNode
 import com.facebook.react.uimanager.ViewManager
 import com.facebook.soloader.SoLoader
+import com.reactnative.osslibraryexample.OSSLibraryExamplePackage
 
 class RNTesterApplication : Application(), ReactApplication {
   override val reactNativeHost: ReactNativeHost by lazy {
@@ -46,6 +47,7 @@ class RNTesterApplication : Application(), ReactApplication {
         return listOf(
             MainReactPackage(),
             PopupMenuPackage(),
+            OSSLibraryExamplePackage(),
             object : TurboReactPackage() {
               override fun getModule(
                   name: String,
@@ -111,11 +113,13 @@ class RNTesterApplication : Application(), ReactApplication {
               override fun createViewManager(
                   reactContext: ReactApplicationContext,
                   viewManagerName: String
-              ): ViewManager<*, out ReactShadowNode<*>> =
+              ): ViewManager<*, out ReactShadowNode<*>>? =
                   if (viewManagerName == "RNTMyNativeView") {
                     MyNativeViewManager()
-                  } else {
+                  } else if (viewManagerName == "RNTMyLegacyNativeView") {
                     MyLegacyViewManager(reactContext)
+                  } else {
+                    null
                   }
             })
       }

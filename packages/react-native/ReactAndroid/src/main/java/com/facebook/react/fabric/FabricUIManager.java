@@ -133,7 +133,8 @@ public class FabricUIManager implements UIManager, LifecycleEventListener, UIBlo
                 + " - Total commit time: %d ms. Avg: %.2f. Median: %.2f ms. Max: %d ms.\n"
                 + " - Layout time: %d ms. Avg: %.2f. Median: %.2f ms. Max: %d ms.\n"
                 + " - Diffing time: %d ms. Avg: %.2f. Median: %.2f ms. Max: %d ms.\n"
-                + " - FinishTransaction (Diffing + JNI serialization): %d ms. Avg: %.2f. Median: %.2f ms. Max: %d ms.\n"
+                + " - FinishTransaction (Diffing + JNI serialization): %d ms. Avg: %.2f. Median:"
+                + " %.2f ms. Max: %d ms.\n"
                 + " - Mounting: %d ms. Avg: %.2f. Median: %.2f ms. Max: %d ms.\n",
             commitPoint.getCommitNumber(),
             commitDuration,
@@ -207,7 +208,14 @@ public class FabricUIManager implements UIManager, LifecycleEventListener, UIBlo
         public void executeItems(Queue<MountItem> items) {
           // This executor can be technically accessed before the dispatcher is created,
           // but if that happens, something is terribly wrong
-          mMountItemDispatcher.dispatchMountItems(items);
+          if (ReactNativeFeatureFlags.forceBatchingMountItemsOnAndroid()) {
+            for (MountItem mountItem : items) {
+              mMountItemDispatcher.addMountItem(mountItem);
+            }
+            mMountItemDispatcher.tryDispatchMountItems();
+          } else {
+            mMountItemDispatcher.dispatchMountItems(items);
+          }
         }
       };
 
@@ -505,7 +513,8 @@ public class FabricUIManager implements UIManager, LifecycleEventListener, UIBlo
             mReactApplicationContext,
             attributedString,
             paragraphAttributes,
-            PixelUtil.toPixelFromDIP(width));
+            PixelUtil.toPixelFromDIP(width),
+            PixelUtil.toPixelFromDIP(height));
   }
 
   @SuppressWarnings("unused")
@@ -1019,7 +1028,8 @@ public class FabricUIManager implements UIManager, LifecycleEventListener, UIBlo
   public void dispatchCommand(
       final int reactTag, final int commandId, @Nullable final ReadableArray commandArgs) {
     throw new UnsupportedOperationException(
-        "dispatchCommand called without surfaceId - Fabric dispatchCommand must be called through Fabric JSI API");
+        "dispatchCommand called without surfaceId - Fabric dispatchCommand must be called through"
+            + " Fabric JSI API");
   }
 
   @Override
@@ -1029,7 +1039,8 @@ public class FabricUIManager implements UIManager, LifecycleEventListener, UIBlo
   public void dispatchCommand(
       final int reactTag, final String commandId, @Nullable final ReadableArray commandArgs) {
     throw new UnsupportedOperationException(
-        "dispatchCommand called without surfaceId - Fabric dispatchCommand must be called through Fabric JSI API");
+        "dispatchCommand called without surfaceId - Fabric dispatchCommand must be called through"
+            + " Fabric JSI API");
   }
 
   @Deprecated

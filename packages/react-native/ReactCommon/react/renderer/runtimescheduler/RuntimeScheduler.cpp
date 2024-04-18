@@ -13,7 +13,6 @@
 #include <react/featureflags/ReactNativeFeatureFlags.h>
 #include <react/renderer/debug/SystraceSection.h>
 #include <utility>
-#include "ErrorUtils.h"
 
 namespace facebook::react {
 
@@ -82,6 +81,13 @@ void RuntimeScheduler::scheduleRenderingUpdate(
     RuntimeSchedulerRenderingUpdate&& renderingUpdate) {
   return runtimeSchedulerImpl_->scheduleRenderingUpdate(
       std::move(renderingUpdate));
+}
+
+void RuntimeScheduler::setShadowTreeRevisionConsistencyManager(
+    ShadowTreeRevisionConsistencyManager*
+        shadowTreeRevisionConsistencyManager) {
+  return runtimeSchedulerImpl_->setShadowTreeRevisionConsistencyManager(
+      shadowTreeRevisionConsistencyManager);
 }
 
 } // namespace facebook::react

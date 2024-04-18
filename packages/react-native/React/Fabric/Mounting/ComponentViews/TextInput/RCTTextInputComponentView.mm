@@ -216,7 +216,7 @@ using namespace facebook::react;
 
 - (void)updateState:(const State::Shared &)state oldState:(const State::Shared &)oldState
 {
-  _state = std::static_pointer_cast<TextInputShadowNode::ConcreteState const>(state);
+  _state = std::static_pointer_cast<const TextInputShadowNode::ConcreteState>(state);
 
   if (!_state) {
     assert(false && "State is `null` for <TextInput> component.");
@@ -573,6 +573,9 @@ using namespace facebook::react;
   UITextRange *selectedRange = _backedTextInputView.selectedTextRange;
   NSInteger oldTextLength = _backedTextInputView.attributedText.string.length;
   _backedTextInputView.attributedText = attributedString;
+  // Updating the UITextView attributedText, for example changing the lineHeight, the color or adding
+  // a new paragraph with \n, causes the cursor to move to the end of the Text and scroll.
+  // This is fixed by restoring the cursor position and scrolling to that position (iOS issue 652653).
   if (selectedRange.empty) {
     // Maintaining a cursor position relative to the end of the old text.
     NSInteger offsetStart = [_backedTextInputView offsetFromPosition:_backedTextInputView.beginningOfDocument
@@ -583,6 +586,7 @@ using namespace facebook::react;
                                                                    offset:newOffset];
     [_backedTextInputView setSelectedTextRange:[_backedTextInputView textRangeFromPosition:position toPosition:position]
                                 notifyDelegate:YES];
+    [_backedTextInputView scrollRangeToVisible:NSMakeRange(offsetStart, 0)];
   }
   [self _restoreTextSelection];
   _lastStringStateWasUpdatedWith = attributedString;

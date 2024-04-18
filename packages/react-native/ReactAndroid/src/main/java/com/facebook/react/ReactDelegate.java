@@ -16,6 +16,7 @@ import androidx.annotation.Nullable;
 import com.facebook.infer.annotation.Assertions;
 import com.facebook.react.config.ReactFeatureFlags;
 import com.facebook.react.devsupport.DoubleTapReloadRecognizer;
+import com.facebook.react.devsupport.ReleaseDevSupportManager;
 import com.facebook.react.devsupport.interfaces.DevSupportManager;
 import com.facebook.react.interfaces.fabric.ReactSurface;
 import com.facebook.react.modules.core.DefaultHardwareBackBtnHandler;
@@ -41,8 +42,17 @@ public class ReactDelegate {
 
   @Nullable private ReactSurface mReactSurface;
 
-  private boolean mFabricEnabled = false;
+  private boolean mFabricEnabled = ReactFeatureFlags.enableFabricRenderer;
 
+  /**
+   * Do not use this constructor as it's not accounting for New Architecture at all. You should
+   * either use {@link ReactDelegate#ReactDelegate(Activity, ReactHost, String, Bundle)} if you're
+   * on bridgeless mode or {@link ReactDelegate#ReactDelegate(Activity, ReactNativeHost, String,
+   * Bundle, boolean)} and use the last parameter to toggle paper/fabric.
+   *
+   * @deprecated Use one of the other constructors instead to account for New Architecture.
+   */
+  @Deprecated
   public ReactDelegate(
       Activity activity,
       ReactNativeHost reactNativeHost,
@@ -107,16 +117,6 @@ public class ReactDelegate {
         getReactNativeHost()
             .getReactInstanceManager()
             .onHostResume(mActivity, (DefaultHardwareBackBtnHandler) mActivity);
-      }
-    }
-  }
-
-  public void onUserLeaveHint() {
-    if (ReactFeatureFlags.enableBridgelessArchitecture) {
-      mReactHost.onHostLeaveHint(mActivity);
-    } else {
-      if (getReactNativeHost().hasInstance()) {
-        getReactNativeHost().getReactInstanceManager().onUserLeaveHint(mActivity);
       }
     }
   }
@@ -238,7 +238,15 @@ public class ReactDelegate {
   public void reload() {
     DevSupportManager devSupportManager = getDevSupportManager();
     if (devSupportManager != null) {
-      devSupportManager.handleReloadJS();
+      // With Bridgeless enabled, reload in RELEASE mode
+      if (devSupportManager instanceof ReleaseDevSupportManager
+          && ReactFeatureFlags.enableBridgelessArchitecture
+          && mReactHost != null) {
+        // Do not reload the bundle from JS as there is no bundler running in release mode.
+        mReactHost.reload("ReactDelegate.reload()");
+      } else {
+        devSupportManager.handleReloadJS();
+      }
     }
   }
 

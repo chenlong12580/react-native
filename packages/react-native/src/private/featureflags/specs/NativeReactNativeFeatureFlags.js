@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<8fcd655a9837ad155fd71efe8b05e3d0>>
+ * @generated SignedSource<<4ba909c3b360c6a4fc9c6ed5996b6a13>>
  * @flow strict-local
  */
 
@@ -26,14 +26,20 @@ export interface Spec extends TurboModule {
   +commonTestFlag?: () => boolean;
   +batchRenderingUpdatesInEventLoop?: () => boolean;
   +enableBackgroundExecutor?: () => boolean;
+  +enableCleanTextInputYogaNode?: () => boolean;
   +enableCustomDrawOrderFabric?: () => boolean;
-  +enableFixForClippedSubviewsCrash?: () => boolean;
   +enableMicrotasks?: () => boolean;
   +enableMountHooksAndroid?: () => boolean;
   +enableSpannableBuildingUnification?: () => boolean;
+  +enableSynchronousStateUpdates?: () => boolean;
+  +enableUIConsistency?: () => boolean;
+  +forceBatchingMountItemsOnAndroid?: () => boolean;
   +inspectorEnableCxxInspectorPackagerConnection?: () => boolean;
   +inspectorEnableModernCDPRegistry?: () => boolean;
+  +preventDoubleTextMeasure?: () => boolean;
   +useModernRuntimeScheduler?: () => boolean;
+  +useNativeViewConfigsInBridgelessMode?: () => boolean;
+  +useStateAlignmentMechanism?: () => boolean;
 }
 
 const NativeReactNativeFeatureFlags: ?Spec = TurboModuleRegistry.get<Spec>(

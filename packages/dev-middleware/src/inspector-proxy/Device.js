@@ -37,8 +37,21 @@ const debug = require('debug')('Metro:InspectorProxy');
 
 const PAGES_POLLING_INTERVAL = 1000;
 
-// Android's stock emulator and other emulators such as genymotion use a standard localhost alias.
-const EMULATOR_LOCALHOST_ADDRESSES: Array<string> = ['10.0.2.2', '10.0.3.2'];
+// Replace hosts appearing in the `url` and `sourceMapURL` fields of
+// `Debugger.scriptParsed`, and back again in messages from the debugger,
+// to account for device/debugger/proxy running on different networks.
+const REWRITE_HOSTS_TO_LOCALHOST: Array<string> = [
+  // A device may retrieve a bundle through 127.0.0.1 via a (SSH) tunnel, but
+  // the (remote) Metro server may be on a host without an IPv4 loopback, so
+  // 127.0.0.1 may not be addressible locally for (e.g., for source map
+  // fetching). Replacing with the more general 'localhost' should always be
+  // safe while also more compatible with IPv6-only setups.
+  '127.0.0.1',
+  // Android's stock emulator and other emulators such as genymotion use a
+  // standard localhost alias.
+  '10.0.2.2',
+  '10.0.3.2',
+];
 
 // Prefix for script URLs that are alphanumeric IDs. See comment in #processMessageFromDeviceLegacy method for
 // more details.
@@ -75,6 +88,11 @@ export default class Device {
 
   // Package name of the app.
   #app: string;
+
+  // Sequences async processing of messages from device to preserve order. Only
+  // necessary while we need to accommodate #processMessageFromDeviceLegacy's
+  // async fetch.
+  #messageFromDeviceQueue: Promise<void> = Promise.resolve();
 
   // Stores socket connection between Inspector Proxy and device.
   #deviceSocket: WS;
@@ -135,20 +153,38 @@ export default class Device {
 
     // $FlowFixMe[incompatible-call]
     this.#deviceSocket.on('message', (message: string) => {
-      const parsedMessage = JSON.parse(message);
-      if (parsedMessage.event === 'getPages') {
-        // There's a 'getPages' message every second, so only show them if they change
-        if (message !== this.#lastGetPagesMessage) {
-          debug(
-            '(Debugger)    (Proxy) <- (Device), getPages ping has changed: ' +
+      this.#messageFromDeviceQueue = this.#messageFromDeviceQueue
+        .then(async () => {
+          const parsedMessage = JSON.parse(message);
+          if (parsedMessage.event === 'getPages') {
+            // There's a 'getPages' message every second, so only show them if they change
+            if (message !== this.#lastGetPagesMessage) {
+              debug(
+                '(Debugger)    (Proxy) <- (Device), getPages ping has changed: ' +
+                  message,
+              );
+              this.#lastGetPagesMessage = message;
+            }
+          } else {
+            debug('(Debugger)    (Proxy) <- (Device): ' + message);
+          }
+          await this.#handleMessageFromDevice(parsedMessage);
+        })
+        .catch(error => {
+          debug('%O\nHandling device message: %s', error, message);
+          try {
+            this.#deviceEventReporter?.logProxyMessageHandlingError(
+              'device',
+              error,
               message,
-          );
-          this.#lastGetPagesMessage = message;
-        }
-      } else {
-        debug('(Debugger)    (Proxy) <- (Device): ' + message);
-      }
-      this.#handleMessageFromDevice(parsedMessage);
+            );
+          } catch (loggingError) {
+            debug(
+              'Error logging message handling error to reporter: %O',
+              loggingError,
+            );
+          }
+        });
     });
     // Sends 'getPages' request to device every PAGES_POLLING_INTERVAL milliseconds.
     this.#pagesPollingIntervalId = setInterval(
@@ -395,7 +431,7 @@ export default class Device {
   // In the future more logic will be added to this method for modifying
   // some of the messages (like updating messages with source maps and file
   // locations).
-  #handleMessageFromDevice(message: MessageFromDevice) {
+  async #handleMessageFromDevice(message: MessageFromDevice) {
     if (message.event === 'getPages') {
       this.#pages = new Map(
         message.payload.map(({capabilities, ...page}) => [
@@ -498,16 +534,13 @@ export default class Device {
           return;
         }
 
-        // Wrapping just to make flow happy :)
-        // $FlowFixMe[unused-promise]
-        this.#processMessageFromDeviceLegacy(
+        await this.#processMessageFromDeviceLegacy(
           parsedPayload,
           debuggerConnection,
           pageId,
-        ).then(() => {
-          const messageToSend = JSON.stringify(parsedPayload);
-          debuggerSocket.send(messageToSend);
-        });
+        );
+        const messageToSend = JSON.stringify(parsedPayload);
+        debuggerSocket.send(messageToSend);
       } else {
         debuggerSocket.send(message.payload.wrappedEvent);
       }
@@ -601,15 +634,14 @@ export default class Device {
     ) {
       const params = payload.params;
       if ('sourceMapURL' in params) {
-        for (let i = 0; i < EMULATOR_LOCALHOST_ADDRESSES.length; ++i) {
-          const address = EMULATOR_LOCALHOST_ADDRESSES[i];
-          if (params.sourceMapURL.includes(address)) {
+        for (const hostToRewrite of REWRITE_HOSTS_TO_LOCALHOST) {
+          if (params.sourceMapURL.includes(hostToRewrite)) {
             // $FlowFixMe[cannot-write]
             payload.params.sourceMapURL = params.sourceMapURL.replace(
-              address,
+              hostToRewrite,
               'localhost',
             );
-            debuggerInfo.originalSourceURLAddress = address;
+            debuggerInfo.originalSourceURLAddress = hostToRewrite;
           }
         }
 
@@ -625,7 +657,7 @@ export default class Device {
             // $FlowFixMe[cannot-write]
             payload.params.sourceMapURL =
               'data:application/json;charset=utf-8;base64,' +
-              new Buffer(sourceMap).toString('base64');
+              Buffer.from(sourceMap).toString('base64');
           } catch (exception) {
             this.#sendErrorToDebugger(
               `Failed to fetch source map ${params.sourceMapURL}: ${exception.message}`,
@@ -634,12 +666,11 @@ export default class Device {
         }
       }
       if ('url' in params) {
-        for (let i = 0; i < EMULATOR_LOCALHOST_ADDRESSES.length; ++i) {
-          const address = EMULATOR_LOCALHOST_ADDRESSES[i];
-          if (params.url.indexOf(address) >= 0) {
+        for (const hostToRewrite of REWRITE_HOSTS_TO_LOCALHOST) {
+          if (params.url.includes(hostToRewrite)) {
             // $FlowFixMe[cannot-write]
-            payload.params.url = params.url.replace(address, 'localhost');
-            debuggerInfo.originalSourceURLAddress = address;
+            payload.params.url = params.url.replace(hostToRewrite, 'localhost');
+            debuggerInfo.originalSourceURLAddress = hostToRewrite;
           }
         }
 

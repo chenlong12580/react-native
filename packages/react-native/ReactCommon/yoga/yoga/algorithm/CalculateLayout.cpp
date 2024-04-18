@@ -929,7 +929,8 @@ static void justifyMainAxis(
       node->style().computeFlexEndPaddingAndBorder(
           mainAxis, direction, ownerWidth);
 
-  const float gap = node->style().computeGapForAxis(mainAxis);
+  const float gap =
+      node->style().computeGapForAxis(mainAxis, availableInnerMainDim);
   // If we are using "at most" rules in the main axis, make sure that
   // remainingFreeSpace is 0 when min main dimension is not given
   if (sizingModeMainDim == SizingMode::FitContent &&
@@ -1380,7 +1381,8 @@ static void calculateLayoutImpl(
       generationCount);
 
   if (childCount > 1) {
-    totalMainDim += node->style().computeGapForAxis(mainAxis) *
+    totalMainDim +=
+        node->style().computeGapForAxis(mainAxis, availableInnerMainDim) *
         static_cast<float>(childCount - 1);
   }
 
@@ -1404,7 +1406,8 @@ static void calculateLayoutImpl(
   // Accumulated cross dimensions of all lines so far.
   float totalLineCrossDim = 0;
 
-  const float crossAxisGap = node->style().computeGapForAxis(crossAxis);
+  const float crossAxisGap =
+      node->style().computeGapForAxis(crossAxis, availableInnerCrossDim);
 
   // Max main dimension of all the lines.
   float maxLineMainDim = 0;
@@ -1745,7 +1748,28 @@ static void calculateLayoutImpl(
         paddingAndBorderAxisCross;
 
     const float remainingAlignContentDim = innerCrossDim - totalLineCrossDim;
-    switch (node->style().alignContent()) {
+
+    // Apply fallback alignments on overflow
+    // https://www.w3.org/TR/css-align-3/#distribution-values
+    const auto appliedAlignContent =
+        remainingAlignContentDim >= 0 ? node->style().alignContent() : [&]() {
+          switch (node->style().alignContent()) {
+            // Fallback to flex-start
+            case Align::SpaceBetween:
+            case Align::Stretch:
+              return Align::FlexStart;
+
+            // Fallback to safe center. TODO: This should be aligned to Start
+            // instead of FlexStart (for row-reverse containers)
+            case Align::SpaceAround:
+            case Align::SpaceEvenly:
+              return Align::FlexStart;
+            default:
+              return node->style().alignContent();
+          }
+        }();
+
+    switch (appliedAlignContent) {
       case Align::FlexEnd:
         currentLead += remainingAlignContentDim;
         break;
@@ -1753,33 +1777,21 @@ static void calculateLayoutImpl(
         currentLead += remainingAlignContentDim / 2;
         break;
       case Align::Stretch:
-        if (innerCrossDim > totalLineCrossDim) {
-          leadPerLine =
-              remainingAlignContentDim / static_cast<float>(lineCount);
-        }
+        leadPerLine = remainingAlignContentDim / static_cast<float>(lineCount);
         break;
       case Align::SpaceAround:
-        if (innerCrossDim > totalLineCrossDim) {
-          currentLead +=
-              remainingAlignContentDim / (2 * static_cast<float>(lineCount));
-          leadPerLine =
-              remainingAlignContentDim / static_cast<float>(lineCount);
-        } else {
-          currentLead += remainingAlignContentDim / 2;
-        }
+        currentLead +=
+            remainingAlignContentDim / (2 * static_cast<float>(lineCount));
+        leadPerLine = remainingAlignContentDim / static_cast<float>(lineCount);
         break;
       case Align::SpaceEvenly:
-        if (innerCrossDim > totalLineCrossDim) {
-          currentLead +=
-              remainingAlignContentDim / static_cast<float>(lineCount + 1);
-          leadPerLine =
-              remainingAlignContentDim / static_cast<float>(lineCount + 1);
-        } else {
-          currentLead += remainingAlignContentDim / 2;
-        }
+        currentLead +=
+            remainingAlignContentDim / static_cast<float>(lineCount + 1);
+        leadPerLine =
+            remainingAlignContentDim / static_cast<float>(lineCount + 1);
         break;
       case Align::SpaceBetween:
-        if (innerCrossDim > totalLineCrossDim && lineCount > 1) {
+        if (lineCount > 1) {
           leadPerLine =
               remainingAlignContentDim / static_cast<float>(lineCount - 1);
         }

@@ -9,9 +9,9 @@
 
 #include <algorithm>
 
+#include <react/nativemodule/dom/NativeDOM.h>
 #include <react/nativemodule/featureflags/NativeReactNativeFeatureFlags.h>
 #include <react/nativemodule/microtasks/NativeMicrotasks.h>
-#include <rncore.h>
 
 namespace facebook::react {
 
@@ -83,6 +83,10 @@ std::shared_ptr<TurboModule> DefaultTurboModuleManagerDelegate::getTurboModule(
     return std::make_shared<NativeMicrotasks>(jsInvoker);
   }
 
+  if (name == NativeDOM::kModuleName) {
+    return std::make_shared<NativeDOM>(jsInvoker);
+  }
+
   return nullptr;
 }
 
@@ -95,7 +99,8 @@ std::shared_ptr<TurboModule> DefaultTurboModuleManagerDelegate::getTurboModule(
       return resolvedModule;
     }
   }
-  return rncore_ModuleProvider(name, params);
+
+  return nullptr;
 }
 
 } // namespace facebook::react

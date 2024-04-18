@@ -58,8 +58,22 @@ static NSDictionary *updateInitialProps(NSDictionary *initialProps, BOOL isFabri
                turboModuleEnabled:(BOOL)turboModuleEnabled
                 bridgelessEnabled:(BOOL)bridgelessEnabled
 {
+  return [self
+      initWithBundleURLBlock:^{
+        return bundleURL;
+      }
+              newArchEnabled:newArchEnabled
+          turboModuleEnabled:turboModuleEnabled
+           bridgelessEnabled:bridgelessEnabled];
+}
+
+- (instancetype)initWithBundleURLBlock:(RCTBundleURLBlock)bundleURLBlock
+                        newArchEnabled:(BOOL)newArchEnabled
+                    turboModuleEnabled:(BOOL)turboModuleEnabled
+                     bridgelessEnabled:(BOOL)bridgelessEnabled
+{
   if (self = [super init]) {
-    _bundleURL = bundleURL;
+    _bundleURLBlock = bundleURLBlock;
     _fabricEnabled = newArchEnabled;
     _turboModuleEnabled = turboModuleEnabled;
     _bridgelessEnabled = bridgelessEnabled;
@@ -91,12 +105,17 @@ static NSDictionary *updateInitialProps(NSDictionary *initialProps, BOOL isFabri
 {
   if (self = [super init]) {
     _configuration = configuration;
-    _contextContainer = std::make_shared<facebook::react::ContextContainer const>();
-    _reactNativeConfig = std::make_shared<facebook::react::EmptyReactNativeConfig const>();
+    _contextContainer = std::make_shared<const facebook::react::ContextContainer>();
+    _reactNativeConfig = std::make_shared<const facebook::react::EmptyReactNativeConfig>();
     _contextContainer->insert("ReactNativeConfig", _reactNativeConfig);
     _turboModuleManagerDelegate = turboModuleManagerDelegate;
   }
   return self;
+}
+
+- (instancetype)initWithConfiguration:(RCTRootViewFactoryConfiguration *)configuration
+{
+  return [self initWithConfiguration:configuration andTurboModuleManagerDelegate:nil];
 }
 
 - (UIView *)viewWithModuleName:(NSString *)moduleName initialProperties:(NSDictionary *)initialProperties
@@ -123,7 +142,7 @@ static NSDictionary *updateInitialProps(NSDictionary *initialProps, BOOL isFabri
     RCTEnableTurboModuleInterop(YES);
     RCTEnableTurboModuleInteropBridgeProxy(YES);
 
-    [self createReactHostIfNeeded];
+    [self createReactHostIfNeeded:launchOptions];
 
     RCTFabricSurface *surface = [_reactHost createSurfaceWithModuleName:moduleName initialProperties:initProps];
 
@@ -207,19 +226,20 @@ static NSDictionary *updateInitialProps(NSDictionary *initialProps, BOOL isFabri
 
 #pragma mark - New Arch Utilities
 
-- (void)createReactHostIfNeeded
+- (void)createReactHostIfNeeded:(NSDictionary *)launchOptions
 {
   if (_reactHost) {
     return;
   }
 
   __weak __typeof(self) weakSelf = self;
-  _reactHost = [[RCTHost alloc] initWithBundleURL:[self bundleURL]
-                                     hostDelegate:nil
-                       turboModuleManagerDelegate:_turboModuleManagerDelegate
-                                 jsEngineProvider:^std::shared_ptr<facebook::react::JSRuntimeFactory>() {
-                                   return [weakSelf createJSRuntimeFactory];
-                                 }];
+  _reactHost = [[RCTHost alloc] initWithBundleURLProvider:self->_configuration.bundleURLBlock
+                                             hostDelegate:nil
+                               turboModuleManagerDelegate:_turboModuleManagerDelegate
+                                         jsEngineProvider:^std::shared_ptr<facebook::react::JSRuntimeFactory>() {
+                                           return [weakSelf createJSRuntimeFactory];
+                                         }
+                                            launchOptions:launchOptions];
   [_reactHost setBundleURLProvider:^NSURL *() {
     return [weakSelf bundleURL];
   }];
@@ -275,7 +295,7 @@ static NSDictionary *updateInitialProps(NSDictionary *initialProps, BOOL isFabri
 
 - (NSURL *)bundleURL
 {
-  return self->_configuration.bundleURL;
+  return self->_configuration.bundleURLBlock();
 }
 
 @end
